@@ -10,6 +10,12 @@
   <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
 </p>
 
+<p align="center">
+  <a href="https://www.youtube.com/@Im-S2-AI">
+    <img src="https://img.shields.io/badge/▶%20Watch%20Generated%20Videos%20on%20YouTube-red?logo=youtube&logoColor=white&style=for-the-badge" alt="Watch on YouTube">
+  </a>
+</p>
+
 ---
 
 ## What is S2?
