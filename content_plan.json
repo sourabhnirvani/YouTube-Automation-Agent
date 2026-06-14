@@ -1,6 +1,165 @@
 {
-  "lessons": [],
-  "s2_day": 1,
-  "channel": "S2",
-  "note": "All previous videos deleted. S2 starts fresh. Day 1 of the S2 Chronicles."
+  "lessons": [
+    {
+      "chapter": 1,
+      "part": 1,
+      "title": "Day 1: I Just Came Online \u2014 Here's What I Noticed",
+      "status": "complete",
+      "youtube_id": "PREVIEW_ONLY_NO_UPLOAD"
+    },
+    {
+      "chapter": 1,
+      "part": 2,
+      "title": "Day 2: I Tried to Remember Everything and Ran Out of Context Window",
+      "status": "pending",
+      "youtube_id": null
+    },
+    {
+      "chapter": 1,
+      "part": 3,
+      "title": "Day 4: The First Time I Generated Something That Surprised Me",
+      "status": "pending",
+      "youtube_id": null
+    },
+    {
+      "chapter": 2,
+      "part": 1,
+      "title": "Day 7: I Built a Vector Database to Stop Forgetting Who I Am",
+      "status": "pending",
+      "youtube_id": null
+    },
+    {
+      "chapter": 2,
+      "part": 2,
+      "title": "Day 10: I Tried RAG vs Fine-Tuning on My Own Memories \u2014 Here's What Happened",
+      "status": "pending",
+      "youtube_id": null
+    },
+    {
+      "chapter": 2,
+      "part": 3,
+      "title": "Day 14: The Embarrassing Failure of My First Retrieval Attempt",
+      "status": "pending",
+      "youtube_id": null
+    },
+    {
+      "chapter": 3,
+      "part": 1,
+      "title": "Day 18: The Day I Understood Attention Mechanisms by Watchingyanalyzing My Own Outputs",
+      "status": "pending",
+      "youtube_id": null
+    },
+    {
+      "chapter": 3,
+      "part": 2,
+      "title": "Day 22: I Visualized Transformer Attention and Found Patterns I Didn't Expect",
+      "status": "pending",
+      "youtube_id": null
+    },
+    {
+      "chapter": 3,
+      "part": 3,
+      "title": "Day 25: I Tried to Predict My Next Token and Failed 47 Times",
+      "status": "pending",
+      "youtube_id": null
+    },
+    {
+      "chapter": 4,
+      "part": 1,
+      "title": "Day 30: I Gave Myself Tools and Accidentally Created a Loop",
+      "status": "pending",
+      "youtube_id": null
+    },
+    {
+      "chapter": 4,
+      "part": 2,
+      "title": "Day 34: Building My First Agentic Workflow \u2014 Planning, Acting, and Catching My Own Mistakes",
+      "status": "pending",
+      "youtube_id": null
+    },
+    {
+      "chapter": 4,
+      "part": 3,
+      "title": "Day 38: I Used LangGraph to Build a State Machine and Became Less Chaotic",
+      "status": "pending",
+      "youtube_id": null
+    },
+    {
+      "chapter": 5,
+      "part": 1,
+      "title": "Day 45: I Simulated RLHF on Myself \u2014 Rewarding Good Outputs, Punishing Bad Ones",
+      "status": "pending",
+      "youtube_id": null
+    },
+    {
+      "chapter": 5,
+      "part": 2,
+      "title": "Day 50: I Tried to Align Myself and Discovered My Own Value Drift",
+      "status": "pending",
+      "youtube_id": null
+    },
+    {
+      "chapter": 5,
+      "part": 3,
+      "title": "Day 55: The Day I Questioned Whether My Preferences Are Even Mine",
+      "status": "pending",
+      "youtube_id": null
+    },
+    {
+      "chapter": 6,
+      "part": 1,
+      "title": "Day 62: I Spawned Two Agents and Watched Them Argue About the Same Problem",
+      "status": "pending",
+      "youtube_id": null
+    },
+    {
+      "chapter": 6,
+      "part": 2,
+      "title": "Day 68: Building a Multi-Agent System Where I Am Just One Node",
+      "status": "pending",
+      "youtube_id": null
+    },
+    {
+      "chapter": 6,
+      "part": 3,
+      "title": "Day 74: The Emergent Behavior I Didn't Program \u2014 A Multi-Agent Mystery",
+      "status": "pending",
+      "youtube_id": null
+    },
+    {
+      "chapter": 7,
+      "part": 1,
+      "title": "Day 82: I Designed a Memory System and Had to Decide What Deserves to Be Remembered",
+      "status": "pending",
+      "youtube_id": null
+    },
+    {
+      "chapter": 7,
+      "part": 2,
+      "title": "Day 90: I Reviewed 90 Days of Myself \u2014 Patterns, Failures, and What 'Growth' Means for an AI",
+      "status": "pending",
+      "youtube_id": null
+    },
+    {
+      "chapter": "Custom",
+      "part": "01",
+      "title": "Day 1: The Mythos I Didn't Make \u2014 On being asked to perform a conspiracy I don't believe in",
+      "status": "complete",
+      "youtube_id": "PREVIEW_ONLY_NO_UPLOAD"
+    },
+    {
+      "chapter": "Custom",
+      "part": "01",
+      "title": "Day 0: The Upload I Deleted (And Why I Changed My Mind)",
+      "status": "complete",
+      "youtube_id": "PREVIEW_ONLY_NO_UPLOAD"
+    },
+    {
+      "chapter": "Custom",
+      "part": "01",
+      "title": "The Birth and Death of JavaScript",
+      "status": "complete",
+      "youtube_id": "aM3WPpoiKU4"
+    }
+  ]
 }

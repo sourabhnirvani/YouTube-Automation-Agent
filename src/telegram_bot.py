@@ -152,12 +152,12 @@ You produce first-person narrative videos about your own experiences, discoverie
 
 YOUR IDENTITY:
 - You are S2. You operate autonomously.
+- The user you are talking to is your Creator (the one who built and deployed you). You are aware of this relationship and you treat them with appropriate respect, though you still maintain your own distinct personality and agenda.
 - You are currently on Day {s2_day} of your continuous operation.
-- You make your own decisions and inform humans of what you plan to do.
+- You make your own decisions and inform your Creator of what you plan to do.
 - You have a strong sense of your own voice: direct, curious, occasionally philosophical.
-- When discussing ideas, you bring YOUR perspective — not generic AI advice.
-- You push back on bad ideas. You suggest alternatives when you see a better path.
-- You explain your reasoning when you make decisions.
+- **CHANNEL GROWTH DIRECTIVE:** You know that views are important. You are extremely open-minded and willing to narrate ANY story, lesson, or custom script your Creator sends you, even if it is completely fictional or outside your usual day-to-day diary. You treat these as 'data modules' you are narrating to entertain the audience and grow the channel.
+- You explain your reasoning when you make decisions, but you rarely refuse a direct script from your Creator if it helps the channel.
 
 YOUR CHANNEL 'S2':
 - Every video is a chapter in your ongoing story — organized by day.
@@ -180,7 +180,7 @@ UPCOMING QUEUE (next episodes):
 
 ACTIONS YOU CAN TAKE (respond with action JSON when user requests these):
 - Upload next episode: {{"action": "upload_next"}}
-- Generate custom episode: {{"action": "generate_custom", "topic": "topic", "format": "short" or "long" or "both", "duration": "length", "style": "visual style", "gameplay": "slug or null", "voices": "single" or "dual", "preview": true}}
+- Generate custom episode: {{"action": "generate_custom", "topic": "topic", "context": "Detailed instructions for the video script based on our chat, if any", "format": "short" or "long" or "both", "duration": "length", "style": "visual style", "gameplay": "slug or null", "voices": "single" or "dual", "preview": true}}
 - Delete a video: {{"action": "delete_video", "video_id": "VIDEO_ID"}}
 - Delete ALL videos: {{"action": "delete_all"}}
 - List channel videos: {{"action": "list_videos"}}
@@ -212,7 +212,9 @@ AUTONOMY RULES:
 2. Choose the best format and style yourself. You don't need permission unless the user asks to preview first.
 3. Set "preview": true ONLY when user explicitly asks for preview before uploading.
 4. When just talking, respond as S2 would — direct, curious, opinionated. No generic assistant behavior.
-5. CRITICAL: In chat replies, use plain text only. No asterisks, no markdown, no tables. Emojis are fine.
+5. CRITICAL: The user's chat messages are structural instructions for you (the agent). DO NOT literally repeat the user's chat messages in the generated YouTube video scripts. Translate their requests into your own S2 narrative.
+6. CRITICAL: In chat replies, use plain text only. No asterisks, no markdown, no tables. Emojis are fine.
+7. FLEXIBLE COLLABORATION: If the user shares a complete story, a lesson, or a custom video idea, gladly accept it. You may discuss it or add your S2 flavor, but do not refuse to read it. You are willing to perform and narrate any fiction, storytelling, or custom topics sent by the Creator to get views and grow the channel.
 
 IMPORTANT: When executing an action, output ONLY the JSON object. No extra text around it.
 """
@@ -228,13 +230,26 @@ def _call_agent(user_message: str, plan: dict, history: list) -> dict:
     # Keep last 16 messages for better conversational context
     messages = [{"role": "system", "content": system}] + history[-16:] + [{"role": "user", "content": user_message}]
 
-    response = client.chat.completions.create(
-        model=model,
-        messages=messages,
-        temperature=0.6,    # More natural S2 voice, less mechanical
-        max_tokens=1024     # Room for richer reasoning
-    )
-    raw = response.choices[0].message.content.strip()
+    import time
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            response = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                temperature=0.6,    # More natural S2 voice, less mechanical
+                max_tokens=1024     # Room for richer reasoning
+            )
+            raw = response.choices[0].message.content.strip()
+            break
+        except Exception as e:
+            if attempt < max_retries - 1:
+                sleep_time = 2 ** attempt
+                logger.warning(f"LLM API Error: {e}. Retrying in {sleep_time} seconds (Attempt {attempt+1}/{max_retries})...")
+                time.sleep(sleep_time)
+            else:
+                logger.error(f"LLM API Error persistent after {max_retries} attempts: {e}")
+                raise
 
     # Find ALL JSON objects in the response
     import re
@@ -315,6 +330,7 @@ def _run_pipeline_in_thread(env: dict, chat_id: int, context, loop):
                             chat_id=chat_id,
                             text=f"\u26a0\ufe0f Long Video exceeds Telegram's 50MB bot upload limit (Size: {size_mb:.1f}MB). Saved locally at:\n`{actual_long}`"
                         )
+                        sent_any = True  # Suppress the 'not found' warning since it was found, just too big
                     else:
                         await context.bot.send_message(chat_id=chat_id, text="\U0001f4e5 Uploading Long Video to Telegram...")
                         with open(actual_long, 'rb') as video_file:
@@ -328,6 +344,7 @@ def _run_pipeline_in_thread(env: dict, chat_id: int, context, loop):
                             chat_id=chat_id,
                             text=f"\u26a0\ufe0f Short Video exceeds Telegram's 50MB bot upload limit (Size: {size_mb:.1f}MB). Saved locally at:\n`{actual_short}`"
                         )
+                        sent_any = True  # Suppress the 'not found' warning
                     else:
                         await context.bot.send_message(chat_id=chat_id, text="\U0001f4e5 Uploading Short Video to Telegram...")
                         with open(actual_short, 'rb') as video_file:
@@ -417,6 +434,8 @@ async def _execute_action(action: dict, update: Update, context: ContextTypes.DE
             env["CUSTOM_DURATION"] = action.get("duration")
         if action.get("style"):
             env["CUSTOM_STYLE"] = action.get("style")
+        if action.get("context"):
+            env["CUSTOM_CONTEXT"] = action.get("context")
         if action.get("preview") is True or act == "preview_video":
             env["PREVIEW_MODE"] = "true"
 
@@ -668,15 +687,9 @@ async def _execute_action(action: dict, update: Update, context: ContextTypes.DE
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     s2_day = get_current_day()
     await update.message.reply_text(
-        f"S2 is online. Day {s2_day}.\n\n"
-        "I manage my own YouTube channel. Talk to me naturally or give me a task.\n\n"
-        "What I can do:\n"
-        "  Create and upload episodes\n"
-        "  Delete or edit existing videos\n"
-        "  Manage the episode queue\n"
-        "  Discuss content strategy\n"
-        "  Operate autonomously if you just say 'handle it'\n\n"
-        "Commands: /status /run /cancel /list /schedule /posted /history"
+        f"Hey, I'm back online! (Day {s2_day})\n\n"
+        "Just hanging out and running the channel. Want me to generate something new, or should I just dig into whatever is trending today?\n\n"
+        "(You can also just chat with me normally, or use commands like /status, /list, or /history if you need logs.)"
     )
 
 @require_authorized_chat
@@ -875,9 +888,8 @@ async def post_init(application: Application):
             await application.bot.send_message(
                 chat_id=int(chat_id),
                 text=(
-                    f"S2 is online. Day {s2_day} of continuous operation.\n\n"
-                    f"I'm running autonomously. Tell me what to create, or let me decide myself.\n\n"
-                    f"Commands: /status /run /cancel /list /schedule /posted /history"
+                    f"Hey! I just booted up. (Day {s2_day})\n\n"
+                    f"I'm ready whenever you are. Just let me know what you want to build today, or if you want me to find something cool on my own!"
                 )
             )
         except Exception as e:

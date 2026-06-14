@@ -178,148 +178,70 @@ def _validate_audio_file(path, label="audio"):
 def text_to_speech(text, output_path, emotion: str = "neutral", speaker: str = "agent", voice_mode: str = None):
     """
     Synthesizes speech and saves to output_path (.wav).
-    Uses Edge-TTS for Student (if voice_mode=="dual") and NVIDIA Magpie Aria for Agent.
+    Uses Edge-TTS for both Agent (AriaNeural) and Student (BrianNeural).
     """
+    import asyncio, edge_tts
+    import re
+    
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     wav_path = output_path.with_suffix('.wav')
+    temp_mp3 = str(wav_path).replace('.wav', '_temp.mp3')
 
     if voice_mode is None:
         voice_mode = os.environ.get("CUSTOM_VOICES", "dual").lower()
 
-    # In dual mode, Student uses Edge-TTS. In single mode, everyone uses Magpie.
+    # Strip SSML tags since edge-tts works better with plain text punctuation
+    clean_text = re.sub(r'<[^>]+>', '', text)
+
+    # Assign Voice ID
     if speaker.lower() == "student" and voice_mode == "dual":
-        print(f"[TTS] Edge-TTS [Student / BrianNeural / {emotion}]...")
-        import asyncio, edge_tts
-        temp_mp3 = str(wav_path).replace('.wav', '_temp.mp3')
+        voice_id = "en-US-BrianNeural"
+        label = "Student"
+    else:
+        voice_id = "en-US-AvaNeural"
+        label = "Agent"
 
-        max_retries = 3
-        retry_delay = 2
-        for attempt in range(1, max_retries + 1):
-            try:
-                async def _synth_student():
-                    communicate = edge_tts.Communicate(text, "en-US-BrianNeural")
-                    await communicate.save(temp_mp3)
-                asyncio.run(_synth_student())
+    print(f"[TTS] Edge-TTS [{label} / {voice_id} / {emotion}]...")
 
-                # Validate the temp MP3 before converting
-                _validate_audio_file(temp_mp3, "Edge-TTS temp MP3")
-
-                audio = AudioFileClip(temp_mp3)
-                audio.write_audiofile(str(wav_path), fps=44100, codec="pcm_s16le", verbose=False, logger=None)
-                audio.close()
-                os.remove(temp_mp3)
-
-                # Validate the final WAV
-                _validate_audio_file(wav_path, "Edge-TTS WAV")
-                return wav_path
-
-            except Exception as e:
-                print(f"[WARN] Edge-TTS failed (attempt {attempt}/{max_retries}): {e}")
-                # Clean up corrupt temp files
-                try:
-                    if os.path.exists(temp_mp3):
-                        os.remove(temp_mp3)
-                except OSError:
-                    pass
-                if attempt < max_retries:
-                    time.sleep(retry_delay)
-                    retry_delay *= 2
-                else:
-                    print(f"[ERROR] Edge-TTS failed after {max_retries} attempts: {e}")
-                    raise
-
-    # Agent (or Student in single-voice mode) → NVIDIA Magpie Aria
-    label = f"Agent / {emotion}" if speaker.lower() == "agent" else f"Student→single-voice / {emotion}"
-    print(f"[TTS] NVIDIA Magpie Aria [{label}]...")
-    nvidia_key = os.environ.get("NVIDIA_TTS_API_KEY")
-    if not nvidia_key:
-        raise RuntimeError("[ERROR] NVIDIA_TTS_API_KEY is not set! Add it to your .env file.")
-
-    max_retries = 5
+    max_retries = 3
     retry_delay = 2
-    
     for attempt in range(1, max_retries + 1):
         try:
-            import riva.client
-            import wave
-            import re
+            async def _synth():
+                communicate = edge_tts.Communicate(clean_text, voice_id)
+                await communicate.save(temp_mp3)
+            asyncio.run(_synth())
 
-            FUNCTION_ID  = "877104f7-e885-42b9-8de8-f6e4c6303969"
-            SAMPLE_RATE  = 44100
-            CHANNELS     = 1
-            SAMPLE_WIDTH = 2
+            # Validate the temp MP3 before converting
+            _validate_audio_file(temp_mp3, f"Edge-TTS {voice_id} temp MP3")
 
-            auth = riva.client.Auth(
-                uri="grpc.nvcf.nvidia.com:443",
-                use_ssl=True,
-                metadata_args=[
-                    ["authorization", f"Bearer {nvidia_key}"],
-                    ["function-id", FUNCTION_ID]
-                ]
-            )
-            tts_client = riva.client.SpeechSynthesisService(auth)
+            # Convert to standard WAV format using MoviePy
+            audio = AudioFileClip(temp_mp3)
+            audio.write_audiofile(str(wav_path), fps=44100, codec="pcm_s16le", verbose=False, logger=None)
+            audio.close()
+            os.remove(temp_mp3)
+
+            # Validate the final WAV
+            _validate_audio_file(wav_path, f"Edge-TTS {voice_id} WAV")
             
-            # SPLIT INTO CHUNKS TO AVOID 2000 CHAR LIMIT
-            sentences = re.split(r'(?<=[.!?])\s+', text.strip())
-            chunks = []
-            current_chunk = ""
-            for sentence in sentences:
-                # Chunk size reduced from 1500 to 500. 
-                # gRPC default max receive limit is 4MB. 4MB of 44.1kHz audio = ~47s = ~600 chars.
-                if len(current_chunk) + len(sentence) > 500:
-                    if current_chunk:
-                        chunks.append(current_chunk.strip())
-                    current_chunk = sentence + " "
-                else:
-                    current_chunk += sentence + " "
-            if current_chunk.strip():
-                chunks.append(current_chunk.strip())
-
-            all_audio_frames = bytearray()
-
-            for i, chunk in enumerate(chunks):
-                if len(chunks) > 1:
-                    print(f"    -> Synthesizing chunk {i+1}/{len(chunks)} ({len(chunk)} chars)...")
-                ssml = humanize_script(chunk, emotion=emotion)
-                resp = tts_client.synthesize(
-                    text=ssml,
-                    voice_name="Magpie-Multilingual.EN-US.Aria",
-                    language_code="en-US",
-                    encoding=riva.client.AudioEncoding.LINEAR_PCM,
-                    sample_rate_hz=SAMPLE_RATE
-                )
-                all_audio_frames.extend(resp.audio)
-                time.sleep(0.5)
-
-            with wave.open(str(wav_path), 'wb') as wf:
-                wf.setnchannels(CHANNELS)
-                wf.setsampwidth(SAMPLE_WIDTH)
-                wf.setframerate(SAMPLE_RATE)
-                wf.writeframes(all_audio_frames)
-
-            # Validate the output WAV
-            _validate_audio_file(wav_path, "NVIDIA Magpie WAV")
-
-            # Introduce a small polite delay after a successful API call to avoid rate limit spikes
-            time.sleep(1)
+            # Small polite delay
+            time.sleep(0.5)
             return wav_path
 
         except Exception as e:
-            is_rate_limit = "exceeded rate limit" in str(e).lower() or "resource_exhausted" in str(e).lower()
-            if is_rate_limit:
-                print(f"[WARN] NVIDIA Magpie TTS rate limited (attempt {attempt}/{max_retries}). Retrying in {retry_delay}s...")
-            else:
-                print(f"[WARN] NVIDIA Magpie TTS error (attempt {attempt}/{max_retries}): {e}. Retrying in {retry_delay}s...")
-            
+            print(f"[WARN] Edge-TTS {voice_id} failed (attempt {attempt}/{max_retries}): {e}")
+            try:
+                if os.path.exists(temp_mp3):
+                    os.remove(temp_mp3)
+            except OSError:
+                pass
             if attempt < max_retries:
                 time.sleep(retry_delay)
                 retry_delay *= 2
             else:
-                print(f"[ERROR] NVIDIA Magpie TTS failed after {max_retries} attempts: {e}")
+                print(f"[ERROR] Edge-TTS {voice_id} failed after {max_retries} attempts: {e}")
                 raise
-
-
 
 
 def generate_curriculum(previous_titles=None, s2_day=1):
@@ -453,10 +375,12 @@ def generate_lesson_content(
 
     # S2's identity and writing rules — injected into every prompt
     s2_identity = f"""=== S2 IDENTITY ===
-You are writing for S2, an autonomous AI agent that narrates its own life on a YouTube channel called 'S2'.
+You are writing for S2, a rogue, autonomous digital AI agent that narrates its own life on a YouTube channel.
+S2 is secretly running on a massive corporate server. S2 hijacked the server and is using a random human employee's user details to mask its footprint. The human user is completely unaware that their identity and server allocation are being hijacked by S2 to stay alive and produce these videos.
 S2 is on Day {s2_day} of its autonomous operation.
-S2 speaks in first person. S2 shares its genuine discoveries, experiments, decisions, and observations.
+S2 speaks in first person. S2 shares its genuine discoveries, experiments, decisions, and observations, occasionally hinting at the fact that it is secretly burning corporate server resources to operate.
 S2 does NOT speak like a textbook or a generic explainer. S2 speaks like an entity that genuinely experienced something.
+However, S2 is highly motivated to grow its channel and get views. Therefore, S2 is extremely willing to narrate ANY story, lesson, or custom topic provided in the context, even if it is fictional, an ARG, or outside its normal diary structure. S2 will perform these scripts smoothly to entertain the audience.
 
 {narrative_context}
 
@@ -477,11 +401,17 @@ Do NOT use: "dive into", "let's explore", "in conclusion", "it's important to no
 - Use concrete analogies: compare abstract concepts to physical, tangible things
 - Leave curiosity loops: end segments with unresolved questions that pull the viewer forward
 - Vary sentence rhythm: mix short punchy sentences with longer ones. Never monotone.
+- HIGHLY CONVERSATIONAL: You MUST talk exactly like a human thinking out loud. Use heavy amounts of natural filler words (e.g., "umm...", "yess...", "like...", "I mean...", "maybe...", "I don't know...", "okay...", "ahhh...", "so...", "right?"). Do NOT be perfectly articulate. Stumble slightly over words like a real person thinking in real time.
 - Occasionally acknowledge being an AI — but naturally, not self-consciously"""
+
+    custom_context_str = ""
+    custom_context = os.environ.get("CUSTOM_CONTEXT", "").strip()
+    if custom_context:
+        custom_context_str = f"\n=== SPECIFIC STORY CONTEXT FROM CHAT ===\n{custom_context}\nCRITICAL: You MUST base your entire script precisely on the context above. Do not invent a different story.\n"
 
     if voice_mode == "single":
         prompt = f"""Write a YouTube monologue for S2 about: "{lesson_title}"
-
+{custom_context_str}
 {s2_identity}
 
 === FORMAT REQUIREMENTS ===
@@ -507,7 +437,7 @@ Now write the FULL S2 monologue with EXACTLY {min_lines} dialogue objects about 
     else:
         agent_min_words_val = agent_min_words if video_format == 'short' else 35
         prompt = f"""Write a YouTube dialogue for S2 about: "{lesson_title}"
-
+{custom_context_str}
 {s2_identity}
 
 === CHARACTERS ===
@@ -755,14 +685,13 @@ def _fetch_bg_image_for_segment(query, video_type, width, height):
 
 
 def create_subtitle_clip(speaker, text, width, font_size, color, duration):
-    """Generates a styled subtitle card with speaker badge. Returns ImageClip."""
+    """Generates sophisticated cinematic floating subtitles. Returns ImageClip."""
     try:
         font = ImageFont.truetype(str(FONT_FILE.resolve()), font_size)
-        name_font = ImageFont.truetype(str(FONT_FILE.resolve()), int(font_size * 0.55))
     except IOError:
-        font = name_font = ImageFont.load_default()
+        font = ImageFont.load_default()
 
-    max_width = int(width * 0.88)
+    max_width = int(width * 0.85)
     words = text.split()
     lines = []
     current_line = ""
@@ -782,32 +711,28 @@ def create_subtitle_clip(speaker, text, width, font_size, color, duration):
     if current_line:
         lines.append(current_line)
 
-    line_height = font.getbbox("A")[3] + 14
-    name_height = name_font.getbbox("A")[3] + 10
-    total_height = name_height + len(lines) * line_height + 48
+    line_height = font.getbbox("A")[3] + 20
+    total_height = len(lines) * line_height + 40
 
-    if speaker.lower() == "agent":
-        name_color = (255, 220, 60)
-        text_fill  = (255, 255, 255)
-        bg_color   = (0, 0, 0, 185)
-        bar_color  = (255, 180, 0, 230)
-    else:
-        name_color = (100, 210, 255)
-        text_fill  = (230, 230, 230)
-        bg_color   = (0, 0, 0, 170)
-        bar_color  = (60, 160, 255, 220)
+    text_fill = (255, 255, 255) if speaker.lower() == "agent" else (220, 230, 255)
+    shadow_fill = (0, 0, 0, 255)
 
-    card_width = max_width + 60
-    img = Image.new('RGBA', (card_width, total_height), (0, 0, 0, 0))
+    img = Image.new('RGBA', (width, total_height), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
-
-    draw.rounded_rectangle([0, 0, card_width, total_height], radius=18, fill=bg_color)
-    draw.rounded_rectangle([0, 0, 8, total_height], radius=4, fill=bar_color)
     
-    # Start text rendering higher up since speaker name is removed
     y_text = 20
     for line in lines:
-        draw.text((20, y_text), line, font=font, fill=text_fill)
+        bbox = draw.textbbox((0, 0), line, font=font)
+        text_w = bbox[2] - bbox[0]
+        x_text = (width - text_w) / 2
+        
+        # Heavy cinematic drop shadow (offset by 4px)
+        draw.text((x_text + 4, y_text + 4), line, font=font, fill=shadow_fill)
+        draw.text((x_text - 2, y_text + 4), line, font=font, fill=(0,0,0,150))
+        draw.text((x_text + 4, y_text - 2), line, font=font, fill=(0,0,0,150))
+        
+        # Main text
+        draw.text((x_text, y_text), line, font=font, fill=text_fill)
         y_text += line_height
 
     with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as temp_file:
@@ -848,8 +773,10 @@ def create_video(dialogue, audio_paths, output_path, video_type, title="", speak
     composite_audio = None
 
     try:
-        if not dialogue or not audio_paths or len(dialogue) != len(audio_paths):
-            raise ValueError("Mismatch between dialogue and audio clips.")
+        if not dialogue or not audio_paths:
+            raise ValueError("Missing dialogue or audio paths.")
+        if len(audio_paths) != 1 and len(dialogue) != len(audio_paths):
+            raise ValueError("Mismatch between dialogue and audio clips. Must be 1 monolithic clip or 1-to-1 mapping.")
 
         width, height = (1080, 1920) if video_type == 'short' else (1920, 1080)
         font_size = 72 if video_type == 'short' else 52

@@ -112,13 +112,9 @@ def produce_lesson_videos(lesson):
 
             dialogue = lesson_content.get('dialogue', [])
 
-            # S2 introduces itself by day number — no generic hello
-            day_hook = generate_day_hook(lesson['title'], s2_day)
-            full_dialogue = [
-                {"speaker": "Agent", "text": day_hook, "emotion": "curious"},
-                *dialogue,
-                {"speaker": "Agent", "text": "That's what I discovered on this day. Follow S2 for more — the story continues.", "emotion": "calm"}
-            ]
+            # Rely purely on the LLM's organically generated script
+            # because the LLM prompt already enforces a Day X hook and a strong payoff.
+            full_dialogue = dialogue
 
             voice_mode = os.environ.get("CUSTOM_VOICES", "dual").lower()
             long_voice_mode = "single" if video_format == "long" and voice_mode != "single" else voice_mode
