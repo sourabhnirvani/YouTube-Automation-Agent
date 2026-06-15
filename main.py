@@ -307,6 +307,12 @@ def main():
     print(f"[PIPELINE] Current working dir: {os.getcwd()}")
     print(f"[PIPELINE] OUTPUT_DIR: {OUTPUT_DIR.resolve()}")
 
+    if not os.environ.get("OPENAI_API_KEY"):
+        print("❌ CRITICAL ERROR: OPENAI_API_KEY environment variable is missing!")
+        print("   If running locally: Add it to your .env file.")
+        print("   If on GitHub Actions: Go to Settings > Secrets and variables > Actions > New repository secret, and add OPENAI_API_KEY.")
+        sys.exit(1)
+
     try:
         OUTPUT_DIR.mkdir(exist_ok=True)
         print(f"[PIPELINE] Created output folder: {OUTPUT_DIR.exists()}")
